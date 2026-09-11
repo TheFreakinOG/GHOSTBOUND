@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/TheFreakinOG/GHOSTBOUND/schemas/policy.schema.json",
+  "title": "GHOSTBOUND policy v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "include"],
+  "properties": {
+    "schema": { "const": "ghostbound.policy/v1" },
+    "include": {
+      "type": "array", "minItems": 1, "maxItems": 10000,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "properties": { "path": { "$ref": "#/$defs/path" }, "tree": { "$ref": "#/$defs/path" }, "to": { "$ref": "#/$defs/path" } },
+        "oneOf": [{ "required": ["path"], "not": { "required": ["tree"] } }, { "required": ["tree"], "not": { "required": ["path"] } }]
+      }
+    },
+    "limits": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "maxFiles": { "type": "integer", "minimum": 1, "maximum": 10000 },
+        "maxFileBytes": { "type": "integer", "minimum": 1, "maximum": 4194304 },
+        "maxTotalBytes": { "type": "integer", "minimum": 1, "maximum": 67108864 }
+      }
+    }
+  },
+  "$defs": { "path": { "type": "string", "minLength": 1, "maxLength": 1024, "description": "Additional runtime validation enforces NFC, portable relative segments, reserved names, byte lengths and collision rules." } }
+}

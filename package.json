@@ -1,0 +1,12 @@
+{
+  "name": "ghostbound",
+  "version": "0.1.0",
+  "description": "Git snapshot to explicit policy to verified mirror",
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "license": "Apache-2.0",
+  "bin": { "ghostbound": "src/cli.mjs" },
+  "files": ["src/", "schemas/", "config/", "docs/", "examples/", "README.md", "SECURITY.md", "THIRD_PARTY.md", "LICENSE"],
+  "scripts": { "test": "node --test test/*.test.mjs", "check": "node scripts/check.mjs" },
+  "repository": { "type": "git", "url": "git+https://github.com/TheFreakinOG/GHOSTBOUND.git" }
+}
