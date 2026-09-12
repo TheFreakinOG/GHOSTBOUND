@@ -1,52 +1,101 @@
 # GHOSTBOUND
 
-A Git-native trust boundary that gives humans and AI agents a verifiable least-privilege view of a private workspace.
+**A Git-native trust boundary for verifiable, least-privilege views of private workspaces.**
 
-**GHOSTBOUND controls what another trust domain is allowed to see.**
+Share exactly the files you approve from one immutable Git commit — as ordinary files with verifiable provenance — without exposing the rest of the repository or leaking dirty working-tree state.
 
 ```text
-immutable Git snapshot → explicit policy → security gates → real-file mirror → verifiable provenance
+private Git workspace
+        │
+        ▼
+ immutable commit
+        │
+        ▼
+ explicit allowlist
+        │
+        ▼
+ security gates
+        │
+        ▼
+ verified real-file mirror
 ```
 
-GHOSTBOUND v0.1 exports explicitly selected text files from one local Git commit.
-It produces ordinary files, an exact policy snapshot, and a deterministic manifest.
-Dirty, deleted and untracked working-tree files never supply export bytes.
+GHOSTBOUND controls **what crosses into another trust domain**.
+
+That other side might be an AI coding agent, a planner, an external reviewer, a sandbox, or simply another human who should not receive your entire private repository.
+
+## Why GHOSTBOUND?
+
+Giving a tool access to a private repository is often an all-or-nothing decision.
+
+Manually copying files is difficult to reproduce. Ignore files are not disclosure policies. Working trees may contain dirty, deleted or untracked data. Prompt-packing tools solve a different problem: how to package context after you have decided what may be disclosed.
+
+GHOSTBOUND puts an explicit boundary before that step.
+
+Given:
+
+```text
+repository + exact commit + explicit policy
+```
+
+it creates a separate real-file mirror containing only the selected committed files.
+
+The mirror can then be given to another tool or person without giving them access to the original repository.
+
+## What v0.1 guarantees
+
+| Property                     | How GHOSTBOUND enforces it                                                                                        |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Immutable source             | Export bytes come from blob objects belonging to one exact Git commit                                             |
+| Explicit disclosure          | Only policy-selected files or trees are included                                                                  |
+| No dirty-tree leakage        | Dirty, deleted and untracked working-tree files never provide export bytes                                        |
+| Real isolation               | The result is a separate directory of ordinary files, not a filtered view into the source repository              |
+| Path confinement             | Traversal, absolute paths, unsafe Windows names, Unicode/case collisions and reserved paths are rejected          |
+| Link safety                  | Selected symlinks and submodules are rejected; mirror links and unsafe ancestors block verification               |
+| Secret defense in depth      | A mandatory Gitleaks scan runs before materialization                                                             |
+| Safe updates                 | Existing mirrors are verified before managed replacement and stale files are removed                              |
+| Provenance                   | The mirror contains the exact policy and a deterministic manifest with source mappings, hashes and Git object IDs |
+| Independent integrity checks | `ghostbound verify` can validate a mirror without access to the private source                                    |
+
+GHOSTBOUND is intentionally fail-closed. Unsupported or ambiguous input blocks the operation rather than silently weakening the boundary.
+
+## What GHOSTBOUND is not
+
+GHOSTBOUND is **not** a sandbox, prompt packer, RAG system, agent runner, repository sanitizer, publisher or background sync service.
+
+It does not claim that a mirror is free of every possible secret. Secret scanning is heuristic defense in depth.
+
+It also does not authenticate the identity of whoever produced a mirror. Hashes prove consistency, not authorship. Source provenance becomes meaningful when the verifier independently trusts the source commit and policy.
+
+See the full [threat model](docs/THREAT_MODEL.md).
 
 ## Quick start
 
-Prerequisites: Node.js 22 or newer, a current Git with `--no-lazy-fetch`
-support, and upstream [Gitleaks CLI](https://github.com/gitleaks/gitleaks/releases)
-8.30.x or newer within major version 8 on PATH. CI pins Gitleaks 8.30.1.
-On Windows, `whoami.exe` and `icacls.exe` must be available to restrict staging ACLs.
-GHOSTBOUND respects Git `safe.directory`; resolve repository ownership yourself.
+### Requirements
 
-From this checkout (no npm install or runtime npm dependencies required):
+GHOSTBOUND v0.1 requires:
+
+* Node.js 22 or newer
+* a current Git with `--no-lazy-fetch` support
+* upstream Gitleaks CLI 8.30.x or newer within major version 8 on `PATH`
+* on Windows, `whoami.exe` and `icacls.exe`
+
+GHOSTBOUND itself has no runtime npm dependencies.
+
+Clone the repository:
+
+```sh
+git clone https://github.com/TheFreakinOG/GHOSTBOUND.git
+cd GHOSTBOUND
+```
+
+Check the CLI:
 
 ```sh
 node src/cli.mjs --help
-node src/cli.mjs plan --repo /private/repository --commit FULL_COMMIT_OID --policy /private/policy.json --out /private/share/mirror
-node src/cli.mjs materialize --repo /private/repository --commit FULL_COMMIT_OID --policy /private/policy.json --out /private/share/mirror
-node src/cli.mjs verify --out /private/share/mirror
 ```
 
-Replace `FULL_COMMIT_OID` with an already resolved, full lowercase SHA-1 or
-SHA-256 commit OID. `HEAD`, tags, branch names, revspecs and abbreviated OIDs
-are rejected. The local repository must already contain every required object.
-GHOSTBOUND never clones, fetches, pulls, pushes or resolves remote branches.
-Older Git versions without the no-lazy-fetch flag fail closed.
-
-For a local package installation, run `npm pack`, then install the resulting
-tarball using `npm install --global ./ghostbound-0.1.0.tgz`. The binary is
-`ghostbound`; replace `node src/cli.mjs` above with that name. This repository
-does not imply an npm registry release or reservation of the package name.
-
-The output's parent must already exist and be trusted. Output and source must
-be disjoint. The output must be absent, empty, or a fully verified GHOSTBOUND
-mirror. All its contents belong to GHOSTBOUND. Do not put `.git`, notes, or
-other files inside it. Extra files, empty extra directories, missing files,
-tampering and links block updates. There is no force or repair mode.
-
-## Policy
+### 1. Create a policy
 
 ```json
 {
@@ -59,115 +108,167 @@ tampering and links block updates. There is no force or repair mode.
 }
 ```
 
-`path` selects exactly one file. `tree` selects every entry below a directory
-prefix. Without `to`, the relative source path is retained. Missing selections,
-overlapping source rules and ambiguous destinations block the entire operation.
-Unknown keys, duplicate JSON keys and type errors also block it. There are no
-globs, exclusions, inherited ignore files, environment expansions or scripts.
+`path` selects one file.
 
-Optional `limits` can only lower these ceilings: `maxFiles: 10000`,
-`maxFileBytes: 4194304`, `maxTotalBytes: 67108864`. Policy JSON is limited to
-1 MiB. See [policy schema](schemas/policy.schema.json) and [design](docs/DESIGN.md).
+`tree` selects every entry below a directory prefix.
 
-`plan` runs the same gates as `materialize`, including the mandatory secret
-scan and complete staging verification, then reports sorted `create`, `update`
-and `delete` paths (including metadata). It never mutates the final output.
-It does create and remove private sibling staging. `materialize` swaps in the
-verified staging directory, verifies the final mirror and removes the old backup.
+`to` optionally changes the destination path.
 
-## Integrity and provenance
+There are deliberately no globs, exclusions, inherited ignore files, environment expansions or executable policy hooks.
 
-`.ghostbound/manifest.json` records tool version, source object format,
-commit/tree, source-to-destination mapping, native blob OIDs, Git modes, byte
-lengths, SHA-256 hashes, policy digest and scanner version/config digest.
-`.ghostbound/policy.json` contains the **exact input policy bytes**.
-The [manifest schema](schemas/manifest.schema.json) documents its structure.
+See [examples/ghostbound.policy.json](examples/ghostbound.policy.json) and the [policy schema](schemas/policy.schema.json).
 
-The mirror digest is SHA-256 of UTF-8 `JSON.stringify` of an array of
-`[destination, gitMode, sha256]` tuples, sorted by destination using JavaScript
-string comparison, with no added whitespace or newline. All filenames must be
-NFC. Manifest JSON uses two-space indentation and one final LF.
+### 2. Choose one immutable commit
 
-**Mirror integrity verification** needs only the mirror:
+GHOSTBOUND accepts only a full lowercase SHA-1 or SHA-256 commit OID.
+
+Resolve it yourself before invoking GHOSTBOUND:
 
 ```sh
-ghostbound verify --out /private/share/mirror
+git -C /private/repository rev-parse HEAD
 ```
 
-It validates metadata, policy digest and mapping consistency, paths, regular
-file types, exact inventory, sizes, content hashes, blob hashes, aggregate
-digest and executable bits on POSIX. It does not rerun Gitleaks.
+Branch names, tags, `HEAD`, abbreviated hashes and revspecs are not accepted by GHOSTBOUND.
 
-**Source provenance verification** additionally needs all three source inputs:
+It never clones, fetches, pulls, pushes or resolves remote branches.
+
+### 3. Plan the mirror
 
 ```sh
-ghostbound verify --out /private/share/mirror --repo /private/repository --commit FULL_COMMIT_OID --policy /private/policy.json
+node src/cli.mjs plan \
+  --repo /private/repository \
+  --commit FULL_COMMIT_OID \
+  --policy /private/policy.json \
+  --out /private/share/mirror
 ```
 
-It recomputes the selected snapshot and compares commit, tree, policy bytes,
-source paths, modes, blob OIDs, mapping and content hashes. This detects
-missing policy-selected files that cannot be inferred from a standalone mirror.
+`plan` runs the same validation and secret gates as materialization, including staging verification, but does not replace the final output.
 
-These hashes are provenance evidence, **not signatures or identity attestations**.
-A dishonest producer can forge a self-consistent mirror and manifest. Use a
-trusted source OID and policy for source verification. There is no Sigstore,
-SLSA claim or external signing trust anchor in v0.1.
+It reports the sorted files that would be created, updated or deleted.
 
-## Secret gate
+### 4. Materialize
 
-Gitleaks is an external runtime prerequisite, not a bundled scanner or GitHub
-Action. Missing scanner, unsupported version, errors, timeout, malformed report
-or findings block materialization. There is no disable flag.
+```sh
+node src/cli.mjs materialize \
+  --repo /private/repository \
+  --commit FULL_COMMIT_OID \
+  --policy /private/policy.json \
+  --out /private/share/mirror
+```
 
-The bundled config extends upstream default rules. A separate private scan
-directory uses neutral `.txt` filenames and includes source/destination names
-and the policy bytes. Source `.gitleaks.toml`, `.gitleaksignore`, ambient
-`GITLEAKS_*` settings and `gitleaks:allow` comments cannot disable the gate.
-Scanner stdout/stderr are never forwarded; redacted JSON stays in process
-memory and never enters the mirror. Errors intentionally omit finding details.
+The result is an ordinary directory containing the approved files plus:
 
-The access boundary comes from **immutable snapshot + explicit policy +
-path/type confinement**. Secret detection is heuristic defense in depth and
-cannot prove complete freedom from secrets. Review the allowlist yourself.
-Neutral scan filenames also mean upstream filename-specific rules are not a
-guarantee. See [THIRD_PARTY.md](THIRD_PARTY.md).
+```text
+.ghostbound/
+├── manifest.json
+└── policy.json
+```
 
-## Threat model and limitations
+The output belongs entirely to GHOSTBOUND. Do not place unrelated files, `.git`, notes or other content inside a managed mirror.
 
-Only regular Git blobs (`100644`, `100755`) containing valid UTF-8 text are
-supported. Control/binary content, NUL, LFS pointers, selected symlinks and
-submodules block the operation. Executable metadata is preserved; Windows does
-not enforce POSIX execute bits. File mtimes and host ACLs are not provenance.
+### 5. Verify
 
-Destination paths reject traversal, absolute paths, Windows ambiguities,
-reserved device names, non-NFC Unicode, case collisions, `.ghostbound` and
-`.git` components. Mirror files cannot be symlinks, junctions or hardlinks.
-Output ancestors are checked with `lstat` and `realpath`.
+A receiver can validate mirror integrity without access to the private repository:
 
-Staging is owner-only (POSIX permissions or Windows ACLs). Run under an account
-that can read the selected private source. Keep staging and output parents
-private until publication by your own separate workflow. A rename failure
-attempts rollback; crashes between renames can leave an absent final directory
-and a sibling staging directory containing the backup. No crash-recovery daemon
-or durability guarantee is provided. See [DESIGN.md](docs/DESIGN.md).
+```sh
+node src/cli.mjs verify --out /private/share/mirror
+```
 
-GHOSTBOUND is not an OS sandbox against a concurrently mutating local attacker
-with the same permissions. It does not protect against compromised Git, Node,
-Gitleaks, the installed tool itself, or intentionally allowlisted sensitive
-information that lacks a detectable secret signature.
-Read the full [threat model](docs/THREAT_MODEL.md) and [security policy](SECURITY.md).
+For full source provenance verification:
 
-## Non-goals and neighboring tools
+```sh
+node src/cli.mjs verify \
+  --out /private/share/mirror \
+  --repo /private/repository \
+  --commit FULL_COMMIT_OID \
+  --policy /private/policy.json
+```
 
-GHOSTBOUND is not a prompt packer, RAG/memory system, semantic selector, sandbox,
-agent runner, orchestrator, model adapter, publisher, remote downloader,
-background sync, watcher or history sanitizer. It has no plugins, policy
-inheritance, binaries, LFS smudge, submodule traversal or agent write-back.
+Standalone verification proves that the mirror is internally consistent with its manifest and captured policy.
 
-[Repomix](https://github.com/yamadashy/repomix) and
-[Code2Prompt](https://github.com/mufeedvh/code2prompt) can consume an already
-verified mirror. GHOSTBOUND controls disclosure; it does not replace their
-prompt-packing features. Signatures and other integrations are outside v0.1.
+Source verification additionally recomputes the selected Git snapshot and checks that the mirror actually corresponds to the trusted commit and policy.
+
+## Why not `.gitignore`, sparse checkout or Repomix?
+
+They solve different problems.
+
+`.gitignore` controls what Git normally tracks. It is not a disclosure boundary for already committed content.
+
+Sparse checkout controls what appears in a Git working tree. The recipient still operates within Git repository semantics and it is not designed to produce a provenance-carrying disclosure artifact.
+
+Tools such as [Repomix](https://github.com/yamadashy/repomix) and [Code2Prompt](https://github.com/mufeedvh/code2prompt) are useful for packaging code into model-friendly context.
+
+GHOSTBOUND sits **before** them:
+
+```text
+private repository
+      ↓
+  GHOSTBOUND
+      ↓
+verified least-privilege mirror
+      ↓
+Repomix / Code2Prompt / AI agent / reviewer / sandbox
+```
+
+GHOSTBOUND decides what may cross the trust boundary. Other tools can decide what to do with the already-approved mirror.
+
+## Security model
+
+The protected asset is everything in the private workspace outside the explicitly authorized view.
+
+The core disclosure boundary is:
+
+```text
+immutable Git snapshot
++ explicit policy
++ path/type confinement
+```
+
+Mandatory Gitleaks scanning adds defense in depth.
+
+Selected content must be regular Git blobs containing valid UTF-8 text. Binary content, NUL/control content, Git LFS pointers, symlinks, submodules and unsupported Git modes block the operation.
+
+Destination validation rejects traversal, absolute paths, Windows path ambiguities, reserved device names, non-NFC Unicode, case collisions, `.git` and `.ghostbound`.
+
+Mirrors are verified using exact inventory, byte lengths, content hashes, Git modes, policy integrity and aggregate digest information.
+
+For the complete boundary and its limitations, read:
+
+* [Threat model](docs/THREAT_MODEL.md)
+* [Design](docs/DESIGN.md)
+* [Security policy](SECURITY.md)
+
+### Important limitations
+
+GHOSTBOUND does not protect against compromised installations of GHOSTBOUND, Node, Git or Gitleaks.
+
+It is not an OS sandbox against another process running with equivalent local permissions.
+
+Secret scanners can miss secrets.
+
+Authorized source text may itself contain malicious instructions or prompt injection; GHOSTBOUND controls disclosure, not the semantics of approved content.
+
+Manifest hashes are provenance evidence, not signatures or identity attestations.
+
+Concurrent writers to the same output are unsupported in v0.1.
+
+## Determinism and provenance
+
+`.ghostbound/manifest.json` records the tool version, source object format, commit and tree, source-to-destination mapping, native blob OIDs, Git modes, byte lengths, SHA-256 hashes, policy digest and scanner information.
+
+`.ghostbound/policy.json` contains the exact input policy bytes.
+
+Given the same local Git objects, commit, exact policy bytes, GHOSTBOUND version and scanner version/configuration, the logical mirror is deterministic.
+
+See the [manifest schema](schemas/manifest.schema.json) for the complete format.
+
+## Conservative by design
+
+GHOSTBOUND v0.1 intentionally has a narrow scope.
+
+It does not have plugins, policy inheritance, executable policy logic, remote repository access, binary export, submodule traversal, LFS smudge, agent write-back, publishing, watching or background synchronization.
+
+Those omissions keep the trust boundary small enough to reason about.
 
 ## Development
 
@@ -177,9 +278,24 @@ npm test
 npm pack --dry-run
 ```
 
-Tests use synthetic repositories only. Install Gitleaks for the real end-to-end
-tests; `GHOSTBOUND_REQUIRE_GITLEAKS=1` makes a missing scanner fail the suite
-instead of skipping those tests. CI requires it on Linux and Windows with
-Node 22 and 24. Process fakes cover scanner failure cases only.
+The test suite uses synthetic repositories.
 
-Licensed under [Apache-2.0](LICENSE).
+Install Gitleaks for the real end-to-end tests. Setting:
+
+```sh
+GHOSTBOUND_REQUIRE_GITLEAKS=1
+```
+
+makes a missing scanner fail the suite rather than skip integration tests.
+
+CI runs on Linux and Windows using Node.js 22 and 24.
+
+## Security reports
+
+Please read [SECURITY.md](SECURITY.md) before reporting vulnerabilities.
+
+Do not include real credentials, private repository content or sensitive workspace paths in public issues. Use a minimal synthetic reproduction.
+
+## License
+
+Apache-2.0.
