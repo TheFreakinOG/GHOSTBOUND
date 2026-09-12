@@ -9,7 +9,8 @@ const exact = ['package.json', 'README.md', 'LICENSE', 'SECURITY.md', 'THIRD_PAR
 for (const f of pack.files) assert.ok(exact.includes(f.path) || roots.some(r => f.path.startsWith(r)), 'unexpected package path');
 const temp = realpathSync.native(mkdtempSync(join(tmpdir(), 'ghostbound-package-')));
 try {
-  execFileSync('tar', ['-xf', resolve(pack.filename), '-C', temp]);
+  // stdin avoids GNU tar treating Windows drive letters as remote archive hosts.
+  execFileSync('tar', ['-xzf', '-'], { cwd: temp, input: readFileSync(resolve(pack.filename)) });
   const help = execFileSync(process.execPath, [join(temp, 'package/src/cli.mjs'), '--help'], { encoding: 'utf8' });
   assert.match(help, /plan\|materialize/);
   for (const f of pack.files) {
