@@ -19,7 +19,14 @@ export function privateDirectory(path) {
 }
 
 // Process seam is exported for targeted failure tests; the CLI never accepts a scanner override.
+let scannerOverride = null;
+export function setScannerProcessOverride(runner) {
+  const previous = scannerOverride;
+  scannerOverride = runner;
+  return () => { scannerOverride = previous; };
+}
 export function scannerProcess(args, cwd, executable = 'gitleaks', prefix = []) {
+  if (scannerOverride) return scannerOverride(args, cwd, executable, prefix);
   const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^(?:GITLEAKS_|GIT_)/i.test(k)));
   return spawnSync(executable, [...prefix, ...args], { cwd, env, windowsHide: true, timeout: 120000, maxBuffer: 4194304, stdio: ['ignore', 'pipe', 'pipe'] });
 }

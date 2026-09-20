@@ -1,6 +1,6 @@
 # GHOSTBOUND
 
-**A Git-native trust boundary for verifiable, least-privilege views of private workspaces.**
+**GHOSTBOUND creates verifiable, policy-controlled Views of private Git workspaces and safely hands them across trust boundaries.**
 
 Share exactly the files you approve from one immutable Git commit — as ordinary files with verifiable provenance — without exposing the rest of the repository or leaking dirty working-tree state.
 
@@ -42,7 +42,7 @@ it creates a separate real-file mirror containing only the selected committed fi
 
 The mirror can then be given to another tool or person without giving them access to the original repository.
 
-## What v0.1 guarantees
+## What v0.2 guarantees
 
 | Property                     | How GHOSTBOUND enforces it                                                                                        |
 | ---------------------------- | ----------------------------------------------------------------------------------------------------------------- |
@@ -56,12 +56,15 @@ The mirror can then be given to another tool or person without giving them acces
 | Safe updates                 | Existing mirrors are verified before managed replacement and stale files are removed                              |
 | Provenance                   | The mirror contains the exact policy and a deterministic manifest with source mappings, hashes and Git object IDs |
 | Independent integrity checks | `ghostbound verify` can validate a mirror without access to the private source                                    |
+| Reusable Views              | A strict JSON View binds a source, policy, output and optional publication target                              |
+| Status and disclosure delta | Local status distinguishes current, stale, invalid and unverifiable mirrors                                  |
+| Optional Git publication    | A previously verified mirror can be published with exact tree, race and ownership checks                      |
 
 GHOSTBOUND is intentionally fail-closed. Unsupported or ambiguous input blocks the operation rather than silently weakening the boundary.
 
 ## What GHOSTBOUND is not
 
-GHOSTBOUND is **not** a sandbox, prompt packer, RAG system, agent runner, repository sanitizer, publisher or background sync service.
+GHOSTBOUND is **not** a sandbox, prompt packer, RAG system, AI agent, orchestrator, repository sanitizer, GitHub App or background sync service. Its optional publisher is a narrow verified Git delivery path, not a general repository-publishing framework.
 
 It does not claim that a mirror is free of every possible secret. Secret scanning is heuristic defense in depth.
 
@@ -73,7 +76,7 @@ See the full [threat model](docs/THREAT_MODEL.md).
 
 ### Requirements
 
-GHOSTBOUND v0.1 requires:
+GHOSTBOUND v0.2 requires:
 
 * Node.js 22 or newer
 * a current Git with `--no-lazy-fetch` support
@@ -128,9 +131,9 @@ Resolve it yourself before invoking GHOSTBOUND:
 git -C /private/repository rev-parse HEAD
 ```
 
-Branch names, tags, `HEAD`, abbreviated hashes and revspecs are not accepted by GHOSTBOUND.
+Branch names, tags, abbreviated hashes and revspecs are not accepted by the snapshot core. View `HEAD` resolution is a local, network-free convenience that produces one full commit OID before the core runs.
 
-It never clones, fetches, pulls, pushes or resolves remote branches.
+`plan`, `materialize`, `verify`, `status` and View `HEAD` resolution do not use the network. Only explicit `publish --view` performs remote reads and a normal Git push.
 
 ### 3. Plan the mirror
 
@@ -187,6 +190,51 @@ node src/cli.mjs verify \
 Standalone verification proves that the mirror is internally consistent with its manifest and captured policy.
 
 Source verification additionally recomputes the selected Git snapshot and checks that the mirror actually corresponds to the trusted commit and policy.
+
+### Reusable Views
+
+A View is operator configuration, not a new disclosure primitive:
+
+```json
+{
+  "schema": "ghostbound.view/v1",
+  "name": "chatgpt",
+  "source": { "repo": "../private-workspace", "ref": "HEAD" },
+  "policy": "./chatgpt.policy.json",
+  "out": "../mirrors/chatgpt"
+}
+```
+
+View paths resolve relative to the View file; absolute paths are also allowed. `source.ref` is exactly `HEAD` or a full SHA-1/SHA-256 OID. Unknown keys, duplicate JSON keys, symlink Views and unsafe names are rejected. See [the View schema](schemas/view.schema.json) and [the example](examples/ghostbound.view.json).
+
+Use the View workflow with:
+
+```sh
+node src/cli.mjs plan --view ./chatgpt.view.json
+node src/cli.mjs materialize --view ./chatgpt.view.json
+node src/cli.mjs verify --view ./chatgpt.view.json
+node src/cli.mjs status --view ./chatgpt.view.json
+```
+
+`status` reports `CURRENT`, `STALE`, `INVALID` or `UNVERIFIABLE`. A source commit change is still `STALE` when no approved content changed; its disclosure delta is empty because provenance is nevertheless old. Disclosure deltas use `newlyExposed`, `changedExposed` and `noLongerExposed`, while filesystem changes continue to use `create`, `update` and `delete`.
+
+### Optional verified Git publication
+
+Add an explicit `publish` object to a View, then run:
+
+```sh
+node src/cli.mjs publish --view ./chatgpt.view.json
+```
+
+The sequence is always:
+
+```text
+private repo → GHOSTBOUND → verified local mirror → verified Git publish → remote consumer
+```
+
+Publication validates the mirror standalone and against the resolved source commit and policy before any network write. It creates the publication tree from mirror bytes with an isolated temporary index and Git plumbing; target working-tree files, the real target index, filters and unrelated files are never publication input. The tree contains exactly the mirror files plus `.ghostbound/manifest.json` and `.ghostbound/policy.json`.
+
+The View's remote URL must exactly match the configured fetch and push URL. The target branch must match the configured branch and be clean. Initial publication requires an absent remote branch, an unborn local branch and no prior local GHOSTBOUND state; existing remote branches are never adopted. Later publications use `refs/ghostbound/views/<name>` as the confirmed local state, require the remote tip to match it, recheck it immediately before push, use a normal non-rewriting refspec, confirm the resulting remote SHA, and only then update that local ref. Git credentials remain the responsibility of Git, credential helpers, SSH or HTTPS; GHOSTBOUND does not manage credentials or claim identity attestation.
 
 ## Why not `.gitignore`, sparse checkout or Repomix?
 
@@ -250,7 +298,7 @@ Authorized source text may itself contain malicious instructions or prompt injec
 
 Manifest hashes are provenance evidence, not signatures or identity attestations.
 
-Concurrent writers to the same output are unsupported in v0.1.
+Concurrent writers to the same output remain unsupported. Publication additionally fails closed on target, local-state or remote races.
 
 ## Determinism and provenance
 
@@ -264,9 +312,9 @@ See the [manifest schema](schemas/manifest.schema.json) for the complete format.
 
 ## Conservative by design
 
-GHOSTBOUND v0.1 intentionally has a narrow scope.
+GHOSTBOUND v0.2 intentionally keeps the v0.1 security core narrow.
 
-It does not have plugins, policy inheritance, executable policy logic, remote repository access, binary export, submodule traversal, LFS smudge, agent write-back, publishing, watching or background synchronization.
+It does not have plugins, policy inheritance, executable policy logic, binary export, submodule traversal, LFS smudge, agent write-back, automatic materialize-on-publish, adoption of existing remote branches, watching or background synchronization. A policy may intentionally disclose 5%, 80% or practically all suitable files; GHOSTBOUND does not decide semantically how much context a consumer needs. Different consumers get the context you intentionally approved for them.
 
 Those omissions keep the trust boundary small enough to reason about.
 

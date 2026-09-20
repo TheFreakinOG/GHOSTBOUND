@@ -1,7 +1,7 @@
 # Security policy
 
-GHOSTBOUND is a small disclosure boundary, not a sandbox or a proof of secrecy.
-Read [the threat model](docs/THREAT_MODEL.md) before use. Only the current v0.1
+GHOSTBOUND is a small disclosure boundary, not a sandbox or a proof of secrecy. The current v0.2 release line retains the v0.1 snapshot, policy, path, scanner and mirror-ownership guarantees and adds reusable Views, local status and optional verified Git publication.
+Read [the threat model](docs/THREAT_MODEL.md) before use. Only the current v0.2
 release line is in scope for fixes at present.
 
 Report vulnerabilities using GitHub's private vulnerability reporting on this

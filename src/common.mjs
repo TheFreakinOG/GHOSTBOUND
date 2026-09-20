@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-export const VERSION = '0.1.0';
+export const VERSION = '0.2.0';
 export const LIMITS = Object.freeze({ maxFiles: 10000, maxFileBytes: 4194304, maxTotalBytes: 67108864 });
 export function fail(code) { throw new Error(code); }
 export function check(ok, code) { if (!ok) fail(code); }

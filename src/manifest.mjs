@@ -21,7 +21,7 @@ function digest(value) { check(typeof value === 'string' && /^[0-9a-f]{64}$/.tes
 export function validateManifest(m, policyBytes) {
   keys(m, ['schema', 'tool', 'source', 'policy', 'secretScan', 'files', 'mirror']);
   check(m.schema === 'ghostbound.manifest/v1', 'unsupported manifest schema');
-  keys(m.tool, ['name', 'version']); check(m.tool.name === 'ghostbound' && m.tool.version === VERSION, 'unsupported tool version');
+  keys(m.tool, ['name', 'version']); check(m.tool.name === 'ghostbound' && ['0.1.0', '0.2.0'].includes(m.tool.version), 'unsupported tool version');
   keys(m.source, ['objectFormat', 'commit', 'tree']);
   check(['sha1', 'sha256'].includes(m.source.objectFormat) && validOid(m.source.commit, m.source.objectFormat) && validOid(m.source.tree, m.source.objectFormat), 'invalid source identity');
   keys(m.policy, ['sha256', 'snapshot']); digest(m.policy.sha256);

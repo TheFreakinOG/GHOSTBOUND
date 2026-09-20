@@ -17,6 +17,16 @@ function git(repo, args, maxBuffer = 33554432) {
     });
   } catch { fail('Git operation failed (check local objects, permissions and safe.directory)'); }
 }
+export function resolveSourceRef(repoInput, ref) {
+  const repo = confinedRoot(repoInput);
+  const format = git(repo, ['rev-parse', '--show-object-format']).toString().trim();
+  check(['sha1', 'sha256'].includes(format), 'unsupported Git object format');
+  let commit = ref;
+  if (ref === 'HEAD') commit = git(repo, ['rev-parse', '--verify', 'HEAD^{commit}'], 1024).toString().trim();
+  check(validOid(commit, format), 'view did not resolve to a full commit OID');
+  check(git(repo, ['cat-file', '-t', commit], 1024).toString().trim() === 'commit', 'view ref is not a commit');
+  return commit;
+}
 export function validOid(oid, format) { return typeof oid === 'string' && new RegExp(`^[0-9a-f]{${format === 'sha1' ? 40 : 64}}$`).test(oid); }
 export function parseTree(bytes, format) {
   const entries = []; let start = 0;

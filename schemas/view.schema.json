@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/TheFreakinOG/GHOSTBOUND/schemas/view.schema.json",
+  "title": "GHOSTBOUND view v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "name", "source", "policy", "out"],
+  "properties": {
+    "schema": { "const": "ghostbound.view/v1" },
+    "name": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$" },
+    "source": {
+      "type": "object", "additionalProperties": false, "required": ["repo", "ref"],
+      "properties": { "repo": { "type": "string", "minLength": 1 }, "ref": { "type": "string", "pattern": "^(HEAD|[0-9a-f]{40}|[0-9a-f]{64})$" } }
+    },
+    "policy": { "type": "string", "minLength": 1 },
+    "out": { "type": "string", "minLength": 1 },
+    "publish": {
+      "type": "object", "additionalProperties": false, "required": ["repo", "remote", "url", "branch"],
+      "properties": {
+        "repo": { "type": "string", "minLength": 1 },
+        "remote": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$" },
+        "url": { "type": "string", "minLength": 1 },
+        "branch": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$" }
+      }
+    }
+  }
+}

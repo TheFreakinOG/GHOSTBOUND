@@ -1,7 +1,7 @@
 {
   "name": "ghostbound",
-  "version": "0.1.0",
-  "description": "Git snapshot to explicit policy to verified mirror",
+  "version": "0.2.0",
+  "description": "Policy-controlled Git views with verifiable mirrors and optional Git publication",
   "type": "module",
   "engines": { "node": ">=22" },
   "license": "Apache-2.0",
