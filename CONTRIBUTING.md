@@ -1,6 +1,6 @@
 # Contributing to GHOSTBOUND
 
-Thanks for helping improve GHOSTBOUND. v0.1 is intentionally narrow: it is a small, auditable Git-native disclosure boundary, not a general repository-processing framework.
+Thanks for helping improve GHOSTBOUND. v0.2 is intentionally narrow: it is a small, auditable Git-native disclosure boundary with reusable Views and optional verified Git delivery, not a general repository-processing framework.
 
 Before contributing, please read:
 
@@ -11,7 +11,7 @@ Before contributing, please read:
 
 ## Scope
 
-Keep changes focused on the existing v0.1 contract. Avoid unrelated refactors, new dependencies, speculative abstractions, and feature expansion. Changes to runtime or security behavior should be justified by a concrete bug or boundary issue and kept as small as practical.
+Keep changes focused on the existing v0.1 core and v0.2 View/status/publish contract. Avoid unrelated refactors, new runtime dependencies, speculative abstractions, and feature expansion. Changes to runtime or security behavior should be justified by a concrete bug or boundary issue and kept as small as practical.
 
 ## Development requirements
 

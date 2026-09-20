@@ -3,26 +3,37 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { check } from './common.mjs';
 import { run, verify } from './mirror.mjs';
+import { readView, resolveView } from './view.mjs';
+import { status } from './status.mjs';
+import { publish } from './publish.mjs';
 
 export function parseArgs(argv) {
-  const [command, ...args] = argv; check(['plan', 'materialize', 'verify'].includes(command), 'expected plan, materialize or verify');
+  const [command, ...args] = argv; check(['plan', 'materialize', 'verify', 'status', 'publish'].includes(command), 'expected plan, materialize, verify, status or publish');
   const options = {};
   for (let i = 0; i < args.length; i += 2) {
-    const key = args[i]; check(['--repo', '--commit', '--policy', '--out'].includes(key), 'unknown CLI option');
+    const key = args[i]; check(['--repo', '--commit', '--policy', '--out', '--view'].includes(key), 'unknown CLI option');
     check(!Object.hasOwn(options, key.slice(2)) && typeof args[i + 1] === 'string' && args[i + 1].length > 0 && !args[i + 1].startsWith('--'), 'invalid or duplicate CLI value');
     options[key.slice(2)] = args[i + 1];
   }
-  check(options.out, '--out required');
+  if (command === 'status' || command === 'publish') check(options.view && Object.keys(options).length === 1, `${command} requires --view`);
+  if (options.view) check(Object.keys(options).length === 1, '--view cannot be mixed with low-level options');
+  if (!options.view) check(options.out, '--out required');
   const count = ['repo', 'commit', 'policy'].filter(k => options[k] !== undefined).length;
-  check(command === 'verify' ? count === 0 || count === 3 : count === 3, 'repo, commit and policy must be supplied together');
+  if (!options.view) check(command === 'verify' ? count === 0 || count === 3 : count === 3, 'repo, commit and policy must be supplied together');
   return { command, options };
 }
 export function main(argv) {
   if (argv.length === 1 && ['--help', '-h'].includes(argv[0])) {
-    console.log('ghostbound plan|materialize --repo <local-root> --commit <full-oid> --policy <file> --out <directory>\nghostbound verify --out <directory> [--repo <local-root> --commit <full-oid> --policy <file>]'); return;
+    console.log('ghostbound plan|materialize --repo <local-root> --commit <full-oid> --policy <file> --out <directory>\nghostbound verify --out <directory> [--repo <local-root> --commit <full-oid> --policy <file>]\nghostbound plan|materialize|verify --view <view.json>\nghostbound status|publish --view <view.json>'); return;
   }
   try {
     const { command, options } = parseArgs(argv);
+    if (options.view) {
+      const view = resolveView(readView(options.view));
+      const result = command === 'status' ? status(view) : command === 'publish' ? publish(view) : command === 'verify' ? verify({ out: view.out, repo: view.source.repo, commit: view.source.commit, policy: view.policy }) : run({ repo: view.source.repo, commit: view.source.commit, policy: view.policy, out: view.out, materialize: command === 'materialize' });
+      console.log(JSON.stringify(result, null, 2));
+      return;
+    }
     console.log(JSON.stringify(command === 'verify' ? verify(options) : run({ ...options, materialize: command === 'materialize' }), null, 2));
   } catch (error) {
     // Native errors and subprocess diagnostics may contain private paths or secrets.

@@ -1,0 +1,16 @@
+{
+  "schema": "ghostbound.view/v1",
+  "name": "chatgpt",
+  "source": {
+    "repo": "../private-workspace",
+    "ref": "HEAD"
+  },
+  "policy": "./chatgpt.policy.json",
+  "out": "../mirrors/chatgpt",
+  "publish": {
+    "repo": "../publication-repo",
+    "remote": "origin",
+    "url": "https://github.com/example/review.git",
+    "branch": "main"
+  }
+}

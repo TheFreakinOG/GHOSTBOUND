@@ -1,8 +1,8 @@
-# GHOSTBOUND v0.1 design
+# GHOSTBOUND v0.2 design
 
 ## Small trust boundary
 
-`cli.mjs` accepts plan/materialize/verify and a closed set of flags.
+`cli.mjs` accepts plan/materialize/verify/status/publish and a closed set of flags.
 `git.mjs` validates the repository root and object format, rejects non-full
 commit OIDs, enumerates one recursive NUL-delimited tree and reads only selected
 blob OIDs. `policy.mjs` validates strict JSON and performs explicit selection.
@@ -12,12 +12,14 @@ blob OIDs. `policy.mjs` validates strict JSON and performs explicit selection.
 `mirror.mjs` stages, verifies, computes changes and replaces transactionally.
 `common.mjs` holds bounded JSON parsing, UTF-8 validation and digest helpers.
 
-There are no runtime npm dependencies, shell-built commands, plugins or
-network calls. Git subprocesses receive argv arrays, a sanitized environment,
-disabled replace objects and lazy fetch, a protocol deny default, deadlines and
-output limits. Git repository configuration and the executables remain trusted
-local inputs; ownership checks are not bypassed. No working-tree files provide
-export bytes. A policy is an explicit separate input, captured byte-for-byte.
+There are no runtime npm dependencies, shell-built commands or plugins. Core
+Git subprocesses receive argv arrays, a sanitized environment, disabled replace
+objects and lazy fetch, a protocol deny default, deadlines and output limits.
+The core, View resolution and status remain network-free. Only `publish.mjs`
+contains remote reads and pushes. Git repository configuration and the
+executables remain trusted local inputs; ownership checks are not bypassed. No
+working-tree files provide export bytes. A policy is an explicit separate
+input, captured byte-for-byte.
 
 Raw tree-path buffers are compared only to locate the policy candidate scope.
 Candidate paths must then decode as valid UTF-8 and pass NFC/portable validation
@@ -91,3 +93,30 @@ Public manifest metadata is unsigned. Standalone verification proves only
 internal consistency against the manifest and its policy, not completeness
 against an unseen tree or honesty of its producer. Source verification supplies
 that missing comparison, provided the caller trusts the commit and policy.
+
+## v0.2 View, status and publication
+
+`view.mjs` is a strict operator-configuration layer. It resolves paths relative
+to the View file, accepts only `HEAD` or a complete OID, and resolves `HEAD`
+locally to one complete commit before calling the snapshot core. It adds no
+disclosure primitive and does not accept branches, tags or general revspecs.
+
+`delta.mjs` is the single record-diff primitive. Filesystem changes compare
+destination bytes and modes; disclosure changes compare source, destination,
+Git blob OID, Git mode, length and SHA-256 provenance. This permits a source
+commit-only change to be reported as stale with an empty disclosure delta.
+
+`status.mjs` first validates a nonempty mirror standalone. A failed standalone
+check is `INVALID`; absent or empty output is `UNVERIFIABLE`. For valid or
+absent output, status computes the current local plan and reports `CURRENT` or
+`STALE`. Policy and source/security errors propagate and are not relabeled.
+
+`publish.mjs` is the only network-capable layer. It verifies the local mirror
+standalone and against the View source and policy, then constructs a target
+tree from mirror bytes with `hash-object`, an isolated temporary index,
+`update-index --index-info`, and `write-tree`. It never discovers or stages the
+target working tree. The target tree is re-read and checked by bytes, lengths,
+modes and hashes before `commit-tree`. Publication state is a local
+`refs/ghostbound/views/<name>` ref updated only after remote SHA confirmation.
+The ref and remote tip are compared before and immediately before a normal
+push; races block closed. No existing remote branch is adopted automatically.

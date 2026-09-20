@@ -71,3 +71,31 @@ Rename rollback is best effort, not crash-atomic or durable. A crash or failed
 rollback may leave the prior mirror in a sibling staging directory. The tool
 retains recovery material if rollback cannot complete. See [DESIGN.md](DESIGN.md).
 Same-user TOCTOU races and concurrent writers are explicitly out of scope.
+
+## v0.2 Views and publication
+
+A View is untrusted operator configuration validated by strict JSON parsing,
+portable identifiers, safe paths and a narrow source reference. `HEAD` is
+resolved locally and network-free to a complete commit before the v0.1 core
+runs. Status uses standalone verification first: a nonempty invalid mirror is
+`INVALID`, while absent or empty output is `UNVERIFIABLE`; source, policy and
+security-gate errors still block normally.
+
+Publication adds trust in the locally installed Git and its configured
+remote-transport and credential infrastructure, plus the remote server as a
+place that stores the confirmed Git object. GHOSTBOUND does not manage
+credentials and does not replace TLS or SSH authentication. The remote SHA
+proves that the configured remote ref points to the same commit whose tree was
+checked locally against the verified mirror. It does not prove human identity,
+commit signatures, remote-server integrity or secrecy beyond the existing
+Gitleaks defense.
+
+Publication creates a complete tree only from verified mirror bytes, verifies
+the target tree before commit, rejects unmanaged content, and keeps the target
+working tree and real index out of the construction path. A local
+`refs/ghostbound/views/<name>` records only a confirmed remote tip. Initial
+publication requires an absent remote branch and an unborn local branch;
+existing remote branches are not adopted. Later publication checks the local
+state ref and remote tip before and immediately before the push, then confirms
+the resulting remote SHA before updating local state. No digital attestation is
+claimed.
