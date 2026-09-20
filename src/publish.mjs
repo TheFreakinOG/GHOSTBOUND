@@ -52,6 +52,12 @@ function configuredTarget(view) {
   const configuredPushUrls = pushUrls.ok ? pushUrls.stdout.toString().split(/\r?\n/).filter(Boolean) : [];
   check(fetchUrls.length === 1 && fetchUrls[0] === view.publish.url, 'publish remote mismatch');
   check((configuredPushUrls.length === 0 && fetchUrls[0] === view.publish.url) || (configuredPushUrls.length === 1 && configuredPushUrls[0] === view.publish.url), 'publish remote mismatch');
+  const effectiveFetch = tryLocalGit(repo, ['remote', 'get-url', '--all', name], { maxBuffer: 4096 });
+  const effectivePush = tryLocalGit(repo, ['remote', 'get-url', '--push', '--all', name], { maxBuffer: 4096 });
+  const effectiveFetchUrls = effectiveFetch.ok ? effectiveFetch.stdout.toString().split(/\r?\n/).filter(Boolean) : [];
+  const effectivePushUrls = effectivePush.ok ? effectivePush.stdout.toString().split(/\r?\n/).filter(Boolean) : [];
+  check(effectiveFetchUrls.length === 1 && effectiveFetchUrls[0] === view.publish.url, 'publish remote mismatch');
+  check(effectivePushUrls.length === 1 && effectivePushUrls[0] === view.publish.url, 'publish remote mismatch');
   return { repo, format: objectFormat(repo), bare };
 }
 
@@ -202,7 +208,7 @@ export function publish(view) {
   check(sameDelta(planned, commitDiff(target, newCommit)), 'publish blocked: publication delta mismatch');
   check(remoteTip(target, view) === baseRemote, 'publish blocked: remote drift');
   let pushError = null;
-  try { networkRunner(target.repo, ['push', view.publish.remote, `${newCommit}:refs/heads/${view.publish.branch}`], { maxBuffer: 33554432 }); }
+  try { networkRunner(target.repo, ['push', '--no-verify', view.publish.remote, `${newCommit}:refs/heads/${view.publish.branch}`], { maxBuffer: 33554432 }); }
   catch (error) { pushError = error; }
   let confirmed;
   try { confirmed = remoteTip(target, view); }

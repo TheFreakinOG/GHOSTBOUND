@@ -1,7 +1,7 @@
 import { readdirSync } from 'node:fs';
 import { statMaybe } from './paths.mjs';
 import { verifyMirror } from './manifest.mjs';
-import { run } from './mirror.mjs';
+import { planState } from './mirror.mjs';
 import { disclosureDelta } from './delta.mjs';
 import { check } from './common.mjs';
 
@@ -18,7 +18,7 @@ export function status(view) {
     try { previous = verifyMirror(view.out); }
     catch { return { view: view.name, status: 'INVALID', source: { currentCommit: view.source.commit } }; }
   }
-  const planned = run({ repo: view.source.repo, commit: view.source.commit, policy: view.policy, out: view.out });
+  const planned = planState({ repo: view.source.repo, commit: view.source.commit, policy: view.policy, out: view.out });
   if (!previous) {
     return {
       view: view.name,

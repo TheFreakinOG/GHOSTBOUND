@@ -29,7 +29,7 @@ function removeOwned(path, parent) {
   rmSync(path, { recursive: true });
 }
 
-export function run({ repo, commit, policy, out, materialize = false }) {
+function execute({ repo, commit, policy, out, materialize = false }) {
   out = confinedRoot(out, { missing: true }); repo = confinedRoot(repo); disjoint(repo, out);
   safePath(basename(out));
   const input = readPolicy(policy); const source = snapshot(repo, commit, input.policy, input.limits);
@@ -69,6 +69,18 @@ export function run({ repo, commit, policy, out, materialize = false }) {
     }
     return { applied: true, changes: delta, disclosure: disclosureDelta(old.manifest, manifest), mirror: manifest.mirror, manifest, policyBytes: input.bytes, source: source.source };
   } finally { if (!preserve) removeOwned(work, parent); }
+}
+
+function publicResult(result) {
+  return { applied: result.applied, changes: result.changes, disclosure: result.disclosure, mirror: result.mirror };
+}
+
+export function run(options) {
+  return publicResult(execute(options));
+}
+
+export function planState(options) {
+  return execute({ ...options, materialize: false });
 }
 
 export function verify({ out, repo, commit, policy }) {
