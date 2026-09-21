@@ -42,6 +42,30 @@ it creates a separate real-file mirror containing only the selected committed fi
 
 The mirror can then be given to another tool or person without giving them access to the original repository.
 
+## Production proof: it replaced the workflow that created it
+
+GHOSTBOUND started from a real private-workspace publication problem: a controlled review surface had to cross into another trust domain without turning the entire source repository into the handoff. The original solution was a private one-off exporter.
+
+That production workflow now runs through GHOSTBOUND v0.2:
+
+```text
+private workspace
+      ↓
+GHOSTBOUND View
+      ↓
+verified local mirror
+      ↓
+verified Git publish
+      ↓
+remote consumer
+```
+
+The cutover passed real dogfood, shadow-production updates, independent review, remote-consumer verification and a Gitleaks scan. The old exporter is now only a manually invoked recovery/rollback fallback.
+
+That is the strongest evidence for the current release: **GHOSTBOUND now runs the production workflow that originally motivated the project, replacing its private one-off exporter.**
+
+See [production dogfood and cutover evidence](docs/PRODUCTION_DOGFOOD.md).
+
 ## What v0.2 guarantees
 
 | Property                     | How GHOSTBOUND enforces it                                                                                        |
